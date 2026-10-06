@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FurtuneMaker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+
+/* Layout: top nav bar + single centered workspace; inputs strip above a ledger-style table */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --fg:#14213a; --muted:#5b6880; --line:#d9dfe8;
+  --accent:#1f4fd1; --accent-soft:#e6edfd; --gain:#0f7a4a; --gain-soft:#e2f4ea; --loss:#c0362c; --loss-soft:#fbe7e5;
+  --input:#f8f9fb;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Manrope", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1524; --surface:#151e31; --fg:#e7ecf5; --muted:#93a0b8; --line:#26324a;
+  --accent:#7ea2ff; --accent-soft:#1c2a4d; --gain:#4fd18f; --gain-soft:#12301f; --loss:#ff7b6e; --loss-soft:#3a1a18;
+  --input:#101828; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0e1524; --surface:#151e31; --fg:#e7ecf5; --muted:#93a0b8; --line:#26324a;
+  --accent:#7ea2ff; --accent-soft:#1c2a4d; --gain:#4fd18f; --gain-soft:#12301f; --loss:#ff7b6e; --loss-soft:#3a1a18;
+  --input:#101828; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+a{color:var(--accent)}
+
+header.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.nav-in{max-width:1080px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:-.01em;color:var(--fg);text-decoration:none;display:flex;align-items:center;gap:8px}
+.brand svg{width:26px;height:26px}
+nav ul{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}
+nav a{display:block;padding:8px 12px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14px}
+nav a:hover{color:var(--fg);background:var(--input)}
+nav a[aria-current="page"]{color:var(--accent);background:var(--accent-soft)}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+main{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:32px 64px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,4vw,38px);letter-spacing:-.02em;line-height:1.1;margin:0 0 8px;text-wrap:balance}
+h2{font-family:var(--display);font-weight:700;font-size:20px;margin:0 0 12px}
+.lede{color:var(--muted);max-width:65ch;margin:0}
+.page-head{display:grid;gap:6px;margin-bottom:24px}
+
+.inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px}
+.field{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:6px;min-width:0}
+.field label,.field .lab{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.field .code{font-family:var(--mono);color:var(--accent);letter-spacing:0;text-transform:none}
+.field input{font:600 20px var(--mono);color:var(--fg);background:var(--input);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0;font-variant-numeric:tabular-nums}
+.field .readout{font:600 20px var(--mono);padding:9px 0;font-variant-numeric:tabular-nums}
+.field small{color:var(--muted);font-size:12px}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.toggle{display:flex;gap:8px;align-items:center;font-weight:600;font-size:14px;color:var(--muted)}
+.toggle input{width:16px;height:16px;accent-color:var(--accent)}
+button{font:600 14px var(--body);border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+button:hover{border-color:var(--accent);color:var(--accent)}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+
+.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+table{width:100%;border-collapse:collapse;min-width:820px;font-variant-numeric:tabular-nums}
+th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;font-weight:700;color:var(--muted);background:var(--input);vertical-align:bottom}
+th .ab{display:block;font-family:var(--mono);font-size:13px;color:var(--fg)}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+td{font-family:var(--mono);font-size:14px}
+td input{font:500 14px var(--mono);color:var(--fg);background:var(--input);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:110px;text-align:right}
+td input.tk{width:96px;text-align:left;text-transform:uppercase}
+td.n{color:var(--muted)}
+.pos{color:var(--gain)} .neg{color:var(--loss)}
+.chip{display:inline-block;padding:3px 8px;border-radius:999px;font-weight:600}
+.chip.pos{background:var(--gain-soft)} .chip.neg{background:var(--loss-soft)}
+tfoot td{border-bottom:0;font-weight:700;font-size:15px;background:var(--input)}
+tfoot td.lbl{font-family:var(--body);text-align:left}
+
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:16px}
+.stat{padding:12px 16px;border-left:3px solid var(--line)}
+.stat .k{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font:600 22px var(--mono);font-variant-numeric:tabular-nums}
+.stat.total.pos{border-color:var(--gain)} .stat.total.neg{border-color:var(--loss)}
+
+.legend{margin-top:24px;color:var(--muted);font-size:13px;display:grid;gap:4px}
+.legend b{font-family:var(--mono);color:var(--fg)}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:24px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px}
+.card p{margin:0;color:var(--muted)}
+.cta{display:inline-block;margin-top:20px;background:var(--accent);color:var(--surface);padding:10px 18px;border-radius:8px;font-weight:700;text-decoration:none}
+footer{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:0 32px;color:var(--muted);font-size:12px}
+@media (prefers-reduced-motion:no-preference){nav a,button{transition:background .15s,color .15s,border-color .15s}}
+</style>
+
+</head>
+<body>
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="#home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M7 22l6-7 5 4 7-9" stroke="var(--surface)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      FurtuneMaker
+    </a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#home" data-page="home">Home</a></li>
+        <li><a href="#calculator" data-page="calculator">Profit/Loss Calculator</a></li>
+        <li><a href="#about" data-page="about">About</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- HOME -->
+  <section id="page-home" hidden>
+    <div class="page-head">
+      <h1>Know where your money stands</h1>
+      <p class="lede">FurtuneMaker helps you split an investment across several stocks and see exactly how much each position gains or loses when you sell.</p>
+    </div>
+    <a class="cta" href="#calculator">Open the Profit/Loss Calculator</a>
+    <div class="cards">
+      <div class="card"><h2>Split evenly</h2><p>Enter a total amount and how many stocks you want. Each stock gets the same average amount (AA).</p></div>
+      <div class="card"><h2>Count shares</h2><p>Enter each buying price and see how many shares that amount buys.</p></div>
+      <div class="card"><h2>See the result</h2><p>Enter selling prices to get gain or loss per share, per stock, and in total.</p></div>
+    </div>
+  </section>
+
+  <!-- CALCULATOR -->
+  <section id="page-calculator" hidden>
+    <div class="page-head">
+      <h1>Profit/Loss Calculator</h1>
+      <p class="lede">Enter your total amount and the number of stocks. Then fill in each ticker, buying price and selling price. Example values are filled in so you can see how it works.</p>
+    </div>
+
+    <div class="inputs">
+      <div class="field">
+        <label for="total">Total amount ($)</label>
+        <input id="total" type="number" min="0" step="0.01" inputmode="decimal" value="10000">
+      </div>
+      <div class="field">
+        <label for="n"><span class="code">N</span> · Number of stocks</label>
+        <input id="n" type="number" min="1" max="50" step="1" inputmode="numeric" value="4">
+      </div>
+      <div class="field">
+        <span class="lab"><span class="code">AA</span> · Average amount per stock</span>
+        <div class="readout" id="aa">$0.00</div>
+        <small>Total amount ÷ N</small>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <label class="toggle"><input id="whole" type="checkbox" checked> Whole shares only</label>
+      <div class="btns">
+        <button type="button" id="sample">Load example</button>
+        <button type="button" id="clear">Clear table</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><span class="ab">N</span>Stock</th>
+            <th><span class="ab">Ticker</span>Symbol</th>
+            <th><span class="ab">BP</span>Buying price</th>
+            <th><span class="ab">Sh</span>Shares</th>
+            <th><span class="ab">SP</span>Selling price</th>
+            <th><span class="ab">NG/L</span>Gain/loss per share</th>
+            <th><span class="ab">TNG/L</span>Total gain/loss</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+        <tfoot>
+          <tr>
+            <td class="lbl" colspan="6">Sum of TNG/L</td>
+            <td id="sum">$0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="summary">
+      <div class="stat"><div class="k">Amount invested</div><div class="v" id="invested">$0.00</div></div>
+      <div class="stat"><div class="k">Value after selling</div><div class="v" id="after">$0.00</div></div>
+      <div class="stat total" id="totalStat"><div class="k">Total gain/loss</div><div class="v" id="sum2">$0.00</div></div>
+      <div class="stat"><div class="k">Return on invested</div><div class="v" id="pct">0.00%</div></div>
+    </div>
+
+    <div class="legend">
+      <div><b>AA</b> = Total amount ÷ N</div>
+      <div><b>Sh</b> = AA ÷ BP (rounded down when "Whole shares only" is on)</div>
+      <div><b>NG/L</b> = SP − BP</div>
+      <div><b>TNG/L</b> = NG/L × Sh, and the last row adds up every TNG/L</div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="page-about" hidden>
+    <div class="page-head">
+      <h1>About FurtuneMaker</h1>
+      <p class="lede">FurtuneMaker is a simple tool for investors who want to see their gains and losses in one clear table. It does not include fees, commissions or taxes, and it is not financial advice.</p>
+    </div>
+  </section>
+</main>
+<footer>© 2026 FurtuneMaker · For educational use. Results exclude fees and taxes.</footer>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const money = v => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const signed = v => (v > 0 ? "+" : "") + money(v);
+  const SAMPLE = [
+    ["AAPL",226.40,241.10],["MSFT",418.20,405.75],["NVDA",118.60,132.90],["AMZN",186.30,179.40],
+    ["GOOGL",165.80,171.25],["TSLA",248.50,231.10],["META",572.40,590.00],["JPM",211.30,218.60]
+  ];
+  let data = []; // {ticker,bp,sp}
+
+  function ensureRows(n){
+    while(data.length < n){
+      data.push({ticker:"",bp:"",sp:""});
+    }
+    data.length = n;
+  }
+
+  function build(){
+    const n = Math.max(1, Math.min(50, parseInt($("n").value) || 1));
+    ensureRows(n);
+    const tb = $("rows"); tb.innerHTML = "";
+    data.forEach((r,i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td class="n">${i+1}</td>`+
+        `<td><input class="tk" id="tk${i}" aria-label="Ticker for stock ${i+1}" value="${r.ticker}" placeholder="TICKER"></td>`+
+        `<td><input id="bp${i}" type="number" min="0" step="0.01" inputmode="decimal" aria-label="Buying price for stock ${i+1}" value="${r.bp}" placeholder="0.00"></td>`+
+        `<td id="sh${i}">–</td>`+
+        `<td><input id="sp${i}" type="number" min="0" step="0.01" inputmode="decimal" aria-label="Selling price for stock ${i+1}" value="${r.sp}" placeholder="0.00"></td>`+
+        `<td id="ng${i}">–</td>`+
+        `<td id="tng${i}">–</td>`;
+      tb.appendChild(tr);
+      tr.querySelector(`#tk${i}`).addEventListener("input", e => { data[i].ticker = e.target.value.toUpperCase(); e.target.value = data[i].ticker; });
+      tr.querySelector(`#bp${i}`).addEventListener("input", e => { data[i].bp = e.target.value; calc(); });
+      tr.querySelector(`#sp${i}`).addEventListener("input", e => { data[i].sp = e.target.value; calc(); });
+    });
+    calc();
+  }
+
+  function cls(el, v){ el.classList.remove("pos","neg"); if(v>0) el.classList.add("pos"); else if(v<0) el.classList.add("neg"); }
+
+  function calc(){
+    const total = parseFloat($("total").value) || 0;
+    const n = data.length;
+    const aa = n ? total / n : 0;
+    const whole = $("whole").checked;
+    $("aa").textContent = money(aa);
+    let sum = 0, invested = 0, after = 0;
+    data.forEach((r,i) => {
+      const bp = parseFloat(r.bp), sp = parseFloat(r.sp);
+      const shEl = $("sh"+i), ngEl = $("ng"+i), tEl = $("tng"+i);
+      if(!(bp > 0)){ shEl.textContent = "–"; ngEl.textContent = "–"; tEl.textContent = "–"; cls(ngEl,0); return; }
+      let sh = aa / bp; if(whole) sh = Math.floor(sh);
+      shEl.textContent = whole ? sh.toLocaleString("en-US") : sh.toLocaleString("en-US",{maximumFractionDigits:4});
+      invested += sh * bp;
+      if(isNaN(sp)){ ngEl.textContent = "–"; tEl.textContent = "–"; cls(ngEl,0); after += sh*bp; return; }
+      const ng = sp - bp, tng = ng * sh;
+      sum += tng; after += sh * sp;
+      ngEl.textContent = signed(ng); cls(ngEl, ng);
+      tEl.innerHTML = `<span class="chip ${tng>0?"pos":tng<0?"neg":""}">${signed(tng)}</span>`;
+    });
+    $("sum").textContent = signed(sum); cls($("sum"), sum);
+    $("sum2").textContent = signed(sum); cls($("sum2"), sum);
+    $("totalStat").classList.remove("pos","neg"); if(sum) $("totalStat").classList.add(sum>0?"pos":"neg");
+    $("invested").textContent = money(invested);
+    $("after").textContent = money(after);
+    const pct = invested ? sum / invested * 100 : 0;
+    $("pct").textContent = (pct>0?"+":"") + pct.toFixed(2) + "%"; cls($("pct"), pct);
+  }
+
+  function loadSample(){
+    const n = data.length;
+    data = [];
+    for(let i=0;i<n;i++){ const s = SAMPLE[i % SAMPLE.length]; data.push({ticker:s[0],bp:String(s[1]),sp:String(s[2])}); }
+    build();
+  }
+
+  $("n").addEventListener("input", build);
+  $("total").addEventListener("input", calc);
+  $("whole").addEventListener("change", calc);
+  $("sample").addEventListener("click", loadSample);
+  $("clear").addEventListener("click", () => { data = data.map(() => ({ticker:"",bp:"",sp:""})); build(); });
+
+  // Routing via menu
+  const pages = ["home","calculator","about"];
+  function route(){
+    let p = (location.hash || "#calculator").slice(1);
+    if(!pages.includes(p)) p = "calculator";
+    pages.forEach(x => { $("page-"+x).hidden = x !== p; });
+    document.querySelectorAll("nav a").forEach(a => { if(a.dataset.page===p) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+    window.scrollTo(0,0);
+  }
+  window.addEventListener("hashchange", route);
+
+  data = []; ensureRows(4); loadSample();
+  route();
+})();
+</script>
+
+</body>
+</html>
