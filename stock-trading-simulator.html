@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stock Trading Simulator | FurtuneMaker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+body { margin: 0; }
+[hidden] { display: none !important; }
+
+/* Layout: status bar + account summary on top; watchlist | chart + order ticket; holdings; orders + activity */
+:root {
+  --bg: #eef1f4;
+  --panel: #ffffff;
+  --ink: #17202b;
+  --muted: #5d6b7a;
+  --line: #d6dde4;
+  --accent: #2647c9;
+  --accent-soft: #e3e8fb;
+  --gain: #0f7a4a;
+  --gain-soft: #dff3e9;
+  --loss: #c2362b;
+  --loss-soft: #fbe5e2;
+  --warn: #9a5b00;
+  --warn-soft: #fdf0d9;
+  --short: #7a3fb8;
+  --short-soft: #efe5fa;
+  --f-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171e; --panel: #1a212b; --ink: #e6ebf1; --muted: #93a1b0; --line: #2b3542;
+    --accent: #7d97ff; --accent-soft: #233056; --gain: #43c98a; --gain-soft: #163a2a;
+    --loss: #ff7a6e; --loss-soft: #45201d; --warn: #f2b45a; --warn-soft: #3d2e14;
+    --short: #c39bff; --short-soft: #2f2442; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171e; --panel: #1a212b; --ink: #e6ebf1; --muted: #93a1b0; --line: #2b3542;
+  --accent: #7d97ff; --accent-soft: #233056; --gain: #43c98a; --gain-soft: #163a2a;
+  --loss: #ff7a6e; --loss-soft: #45201d; --warn: #f2b45a; --warn-soft: #3d2e14;
+  --short: #c39bff; --short-soft: #2f2442; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 16px 40px; display: grid; gap: 14px; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--gain); } .down { color: var(--loss); }
+
+header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+h1 { font-family: var(--f-display); font-size: 26px; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 2px 0 0; font-size: 13px; max-width: 62ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stamp { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 600 12px var(--f-body); padding: 7px 11px; border-radius: 6px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.danger { background: var(--loss); color: #fff; border-color: var(--loss); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.banner { border-radius: 8px; padding: 10px 14px; font-size: 13px; border: 1px solid var(--line); background: var(--panel); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.banner b { font-weight: 600; }
+.banner.warn { background: var(--warn-soft); border-color: transparent; color: var(--ink); }
+.banner.warn b { color: var(--warn); }
+.banner.err { background: var(--loss-soft); border-color: transparent; }
+.banner.err b { color: var(--loss); }
+
+.summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.summary > div { background: var(--panel); padding: 12px 14px; min-width: 0; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+.summary .val { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 19px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.summary .delta { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+.grid { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 14px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.panel h2 { font-family: var(--f-display); font-size: 15px; margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.panel h2 span { font-family: var(--f-body); font-weight: 500; font-size: 12px; color: var(--muted); }
+
+.addrow { display: flex; gap: 6px; padding: 10px 10px 4px; }
+.addrow input { flex: 1; min-width: 0; font: 600 13px var(--f-mono); text-transform: uppercase; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+.addmsg { font-size: 12px; padding: 0 12px; min-height: 16px; color: var(--muted); }
+.addmsg.err { color: var(--loss); }
+.watch { list-style: none; margin: 0; padding: 4px; }
+.watch li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-radius: 7px; }
+.watch li:hover { background: var(--bg); }
+.watch li.sel { background: var(--accent-soft); }
+.watch .pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 4px 9px 10px; border: 0; background: transparent; color: var(--ink); cursor: pointer; text-align: left; font: inherit; min-width: 0; }
+.watch .rm { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 6px 10px; border-radius: 6px; }
+.watch .rm:hover { color: var(--loss); }
+.tk { font-family: var(--f-mono); font-weight: 600; font-size: 13px; }
+.tag { font: 700 9px var(--f-body); letter-spacing: 0.06em; padding: 1px 5px; border-radius: 99px; margin-left: 6px; vertical-align: 2px; }
+.tag.long { background: var(--gain-soft); color: var(--gain); }
+.tag.short { background: var(--short-soft); color: var(--short); }
+.sm { font-size: 11px; color: var(--muted); }
+.watch .px { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+.watch .chg { font-size: 11px; }
+
+.main { display: grid; gap: 14px; min-width: 0; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 280px; }
+.chart-area { padding: 14px; min-width: 0; border-right: 1px solid var(--line); }
+.quote-head { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.quote-head .big { font-family: var(--f-mono); font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.quote-head .tkbig { font-family: var(--f-display); font-size: 20px; font-weight: 700; }
+.quote-head .meta { color: var(--muted); font-size: 12px; width: 100%; }
+.ohlc { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; margin-top: 6px; }
+.ohlc span { color: var(--muted); }
+.ohlc b { font-family: var(--f-mono); font-weight: 500; color: var(--ink); }
+#chart { width: 100%; height: 250px; display: block; margin-top: 8px; }
+.chart-msg { font-size: 13px; color: var(--muted); padding: 8px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: 5px; }
+.legend i.cost { border-top: 2px dashed var(--muted); }
+
+.ticket { padding: 14px; display: grid; gap: 12px; align-content: start; }
+.side { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.side button { border: 0; padding: 9px 4px; font: 700 13px var(--f-display); cursor: pointer; background: var(--panel); color: var(--muted); }
+.side button:nth-child(odd) { border-right: 1px solid var(--line); }
+.side button:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+.side button[aria-pressed="true"][data-side="buy"] { background: var(--gain); color: #fff; }
+.side button[aria-pressed="true"][data-side="sell"] { background: var(--loss); color: #fff; }
+.side button[aria-pressed="true"][data-side="short"] { background: var(--short); color: #fff; }
+.side button[aria-pressed="true"][data-side="cover"] { background: var(--accent); color: #fff; }
+.side button:disabled { opacity: 0.4; cursor: not-allowed; }
+.hint { font-size: 12px; color: var(--muted); margin: -4px 0 0; }
+.field { display: grid; gap: 5px; }
+.field label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.field input, .field select { width: 100%; font: 500 15px var(--f-mono); padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); }
+.field select { font-family: var(--f-body); font-size: 13px; }
+.qty-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.qty-row button { flex: 1; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; font: 600 11px var(--f-body); padding: 5px 0; cursor: pointer; }
+.est { display: grid; gap: 4px; font-size: 13px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.est div { display: flex; justify-content: space-between; gap: 8px; }
+.est span:first-child { color: var(--muted); }
+.submit { border: 0; border-radius: 7px; padding: 11px; font: 700 14px var(--f-display); color: #fff; background: var(--gain); cursor: pointer; }
+.submit[data-side="sell"] { background: var(--loss); }
+.submit[data-side="short"] { background: var(--short); }
+.submit[data-side="cover"] { background: var(--accent); }
+.submit:disabled { opacity: 0.45; cursor: not-allowed; }
+.msg { font-size: 12px; min-height: 18px; }
+.msg.err { color: var(--loss); } .msg.ok { color: var(--gain); }
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font: 700 10px var(--f-body); letter-spacing: 0.06em; padding: 2px 7px; border-radius: 99px; }
+.pill.buy { background: var(--gain-soft); color: var(--gain); }
+.pill.sell { background: var(--loss-soft); color: var(--loss); }
+.pill.short { background: var(--short-soft); color: var(--short); }
+.pill.cover { background: var(--accent-soft); color: var(--accent); }
+.empty { padding: 18px 14px; color: var(--muted); font-size: 13px; white-space: normal; }
+.lower { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; align-items: start; }
+.log { list-style: none; margin: 0; padding: 0; }
+.log li { padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+.log li:last-child { border-bottom: 0; }
+.log .t { font-family: var(--f-mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
+.note { color: var(--muted); font-size: 12px; margin: 0; max-width: 90ch; }
+
+@media (max-width: 1000px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .stage { grid-template-columns: minmax(0, 1fr); }
+  .chart-area { border-right: 0; border-bottom: 1px solid var(--line); }
+  .lower { grid-template-columns: minmax(0, 1fr); }
+  .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary .val { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--line); vertical-align: 4px; margin-left: 4px; }
+.live-dot.live { background: var(--gain); box-shadow: 0 0 0 3px var(--gain-soft); }
+.live-dot.connecting { background: var(--warn); }
+.keypanel { padding: 14px; display: grid; gap: 10px; }
+.keypanel b { font-family: var(--f-display); font-size: 15px; }
+.legend i.prev { border-top: 2px dotted var(--muted); }
+.px { border-radius: 4px; transition: background-color .6s; }
+.flash-up { background: var(--gain-soft); } .flash-down { background: var(--loss-soft); }
+
+header.site{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.site-in{max-width:1240px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.site-brand{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:8px}
+.site-brand svg{width:24px;height:24px}
+header.site ul{list-style:none;margin:0;padding:0;display:flex;gap:4px;flex-wrap:wrap}
+header.site nav a{display:block;padding:7px 11px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14px}
+header.site nav a:hover{color:var(--ink);background:var(--bg)}
+header.site nav a[aria-current="page"]{color:var(--accent);background:var(--accent-soft)}
+header.site a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<header class="site">
+  <div class="site-in">
+    <a class="site-brand" href="index.html#home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M7 22l6-7 5 4 7-9" stroke="var(--panel)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      FurtuneMaker
+    </a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="index.html#home">Home</a></li>
+        <li><a href="index.html#calculator">Profit/Loss Calculator</a></li>
+        <li><a href="stock-trading-simulator.html" aria-current="page">Stock Trading Simulator</a></li>
+        <li><a href="index.html#about">About</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Stock Trading Simulator <span class="live-dot" id="liveDot" title="Live stream status"></span></h1>
+      <p class="sub">Practice trading real US stocks with $100,000 of play money. Real-time prices from Finnhub. Go long, or sell short and buy to cover.</p>
+    </div>
+    <div class="controls">
+      <span class="stamp" id="mkt">Market status unknown</span>
+      <span class="stamp" id="stamp">Not connected</span>
+      <button class="btn" id="keyBtn" type="button">API key</button>
+      <span id="resetBox"><button class="btn" id="resetBtn" type="button">Reset account</button></span>
+    </div>
+  </header>
+
+  <form class="panel keypanel" id="keyForm" novalidate hidden>
+    <div>
+      <b>Connect your Finnhub API key</b>
+      <p class="sub">Get a free key at finnhub.io (Dashboard → API key). It's stored only in this browser and sent only to Finnhub.</p>
+    </div>
+    <div class="addrow" style="padding:0">
+      <input id="keyInput" type="password" autocomplete="off" placeholder="Paste your Finnhub API key" aria-label="Finnhub API key" style="text-transform:none">
+      <button class="btn primary" type="submit">Connect</button>
+    </div>
+    <div class="addmsg" id="keyMsg" role="status" style="padding:0"></div>
+  </form>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="summary" aria-label="Account summary">
+    <div><div class="label">Account value</div><div class="val" id="sTotal">$0</div><div class="delta" id="sTotalD"></div></div>
+    <div><div class="label">Cash</div><div class="val" id="sCash">$0</div><div class="delta">includes short-sale proceeds</div></div>
+    <div><div class="label">Buying power</div><div class="val" id="sBP">$0</div><div class="delta" id="sBPD"></div></div>
+    <div><div class="label">Unrealized P/L</div><div class="val" id="sUnreal">$0</div><div class="delta" id="sUnrealD"></div></div>
+    <div><div class="label">Realized P/L</div><div class="val" id="sReal">$0</div><div class="delta">closed trades, after fees</div></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel" aria-label="Watchlist">
+      <h2>Watchlist <span id="wCount"></span></h2>
+      <form class="addrow" id="addForm" novalidate>
+        <input id="addSym" type="text" maxlength="10" placeholder="Add symbol, e.g. NFLX" autocomplete="off" aria-label="Stock symbol to add">
+        <button class="btn" type="submit" id="addBtn">Add</button>
+      </form>
+      <div class="addmsg" id="addMsg" role="status"></div>
+      <ul class="watch" id="watch"></ul>
+    </section>
+
+    <div class="main">
+      <section class="panel stage">
+        <div class="chart-area">
+          <div class="quote-head">
+            <span class="tkbig" id="qTk">—</span>
+            <span class="big" id="qPx">—</span>
+            <span class="num" id="qChg"></span>
+            <span class="meta" id="qMeta"></span>
+          </div>
+          <div class="ohlc" id="ohlc"></div>
+          <canvas id="chart" aria-label="Intraday price chart"></canvas>
+          <div class="chart-msg" id="chartMsg" hidden></div>
+          <div class="legend">
+            <span><i></i>Live price since you opened the page</span>
+            <span><i class="prev"></i>Previous close</span>
+            <span id="costLegend" hidden><i class="cost"></i><span id="costLabel">Your average cost</span></span>
+            <span id="hiLo" class="num"></span>
+          </div>
+        </div>
+
+        <form class="ticket" id="ticket" novalidate>
+          <div class="side" role="group" aria-label="Order action">
+            <button type="button" data-side="buy" aria-pressed="true">Buy</button>
+            <button type="button" data-side="sell" aria-pressed="false">Sell</button>
+            <button type="button" data-side="short" aria-pressed="false">Sell short</button>
+            <button type="button" data-side="cover" aria-pressed="false">Buy to cover</button>
+          </div>
+          <p class="hint" id="sideHint"></p>
+          <div class="field">
+            <label for="otype">Order type</label>
+            <select id="otype">
+              <option value="market">Market: fill at the live price</option>
+              <option value="limit">Limit: fill at my price or better</option>
+            </select>
+          </div>
+          <div class="field" id="limitField" hidden>
+            <label for="limitPx">Limit price ($)</label>
+            <input id="limitPx" type="number" step="0.01" min="0.01" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="qty">Shares</label>
+            <input id="qty" type="number" min="1" step="1" value="10" inputmode="numeric">
+            <div class="qty-row">
+              <button type="button" data-frac="0.1">10%</button>
+              <button type="button" data-frac="0.25">25%</button>
+              <button type="button" data-frac="0.5">50%</button>
+              <button type="button" data-frac="1">Max</button>
+            </div>
+          </div>
+          <div class="est">
+            <div><span>Price</span><span class="num" id="eP">—</span></div>
+            <div><span>Commission</span><span class="num">$1.00</span></div>
+            <div><span id="eLbl">Estimated cost</span><span class="num" id="eT">—</span></div>
+            <div><span>Your position</span><span class="num" id="eOwn">none</span></div>
+          </div>
+          <button class="submit" id="submit" type="submit" data-side="buy">Buy</button>
+          <div class="msg" id="msg" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Positions <span id="hCount">0 open</span></h2>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Stock</th><th>Type</th><th class="r">Shares</th><th class="r">Avg entry</th><th class="r">Price</th><th class="r">Market value</th><th class="r">P/L</th><th class="r">P/L %</th></tr></thead>
+            <tbody id="holdings"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="lower">
+        <section class="panel">
+          <h2>Orders <span id="oCount"></span></h2>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Time</th><th>Action</th><th>Stock</th><th class="r">Shares</th><th class="r">Price</th><th>Status</th></tr></thead>
+              <tbody id="orders"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Activity</h2>
+          <ul class="log" id="log"></ul>
+        </section>
+      </div>
+      <p class="note">Prices stream live from Finnhub while the US market is open (9:30 AM–4:00 PM Eastern) and fall back to a quote refresh every 30 seconds. Outside market hours you trade at the last price. Short selling: the sale proceeds go into your cash and 50% of the short's value is held as margin on top, so each short uses half its value in buying power. If buying power turns negative you'll get a margin warning. Your account and API key are saved in this browser only.</p>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  const API = "https://finnhub.io/api/v1", WS = "wss://ws.finnhub.io";
+  const START_CASH = 100000, FEE = 1, MARGIN = 0.5, MAXPTS = 800;
+  const DEFAULT_WATCH = ["AAPL", "MSFT", "NVDA", "AMZN", "TSLA", "SPY"];
+  const KEY = "paperfloor-finnhub-v1", KKEY = "paperfloor-finnhub-key", QKEY = "paperfloor-finnhub-quotes", TKEY = "paperfloor-finnhub-ticks";
+
+  const fmt = (n) => (n < 0 ? "−$" : "$") + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sgn = (n) => (n > 0.004 ? "+" : n < -0.004 ? "−" : "") + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pct = (n) => (n > 0.004 ? "+" : n < -0.004 ? "−" : "") + Math.abs(n).toFixed(2) + "%";
+  const cls = (n) => (n > 0.004 ? "up" : n < -0.004 ? "down" : "");
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  const tfmt = (ms, withDay) => new Date(ms).toLocaleString("en-US", withDay ? { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  const nowStr = () => tfmt(Date.now(), true);
+
+  // ---------- state ----------
+  function fresh() { return { cash: START_CASH, realized: 0, pos: {}, orders: [], log: [], watch: DEFAULT_WATCH.slice(), sel: "AAPL", seq: 1 }; }
+  let S = lsGet(KEY, null); if (!S || !S.watch || typeof S.cash !== "number") S = fresh();
+  let apiKey = lsGet(KKEY, "");
+  let Q = lsGet(QKEY, {});      // sym -> {price, open, high, low, prev, change, changePct, ts, updatedAt}
+  let TK = lsGet(TKEY, {});     // sym -> [[ms, price], ...] collected live points (today)
+  const save = () => lsSet(KEY, S);
+  let saveTicksT = null; const saveTicks = () => { clearTimeout(saveTicksT); saveTicksT = setTimeout(() => { lsSet(TKEY, TK); lsSet(QKEY, Q); }, 2000); };
+  function addLog(text) { S.log.unshift({ time: nowStr(), text }); S.log = S.log.slice(0, 40); }
+  if (!S.log.length) addLog("Account opened with " + fmt(START_CASH) + " in cash.");
+  // drop collected points older than 20 hours so the chart shows the current session
+  Object.keys(TK).forEach((s) => { TK[s] = (TK[s] || []).filter((p) => Date.now() - p[0] < 20 * 3600e3); });
+
+  // ---------- account math ----------
+  const px = (t) => (Q[t] && Q[t].price ? Q[t].price : null);
+  function totals() {
+    let longVal = 0, shortVal = 0, unreal = 0, basis = 0;
+    Object.keys(S.pos).forEach((t) => {
+      const p = S.pos[t], price = px(t) ?? p.cost;
+      if (p.qty > 0) { longVal += p.qty * price; unreal += (price - p.cost) * p.qty; }
+      else { shortVal += -p.qty * price; unreal += (p.cost - price) * -p.qty; }
+      basis += Math.abs(p.qty) * p.cost;
+    });
+    return { longVal, shortVal, unreal, basis, equity: S.cash + longVal - shortVal, bp: S.cash - (1 + MARGIN) * shortVal };
+  }
+
+  // ---------- trading ----------
+  function execute(side, t, qty, price) {
+    const p = S.pos[t] || { qty: 0, cost: 0 }, T = totals();
+    if (side === "buy") {
+      if (p.qty < 0) return "You're short " + t + ". Use Buy to cover to close the short first.";
+      const total = qty * price + FEE;
+      if (total > T.bp + 1e-9) return "Not enough buying power. This order needs " + fmt(total) + " and you have " + fmt(Math.max(T.bp, 0)) + ".";
+      S.cash -= total; p.cost = (p.cost * p.qty + qty * price + FEE) / (p.qty + qty); p.qty += qty;
+    } else if (side === "sell") {
+      if (p.qty <= 0) return "You don't own any " + t + ". To bet on a drop, use Sell short.";
+      if (qty > p.qty) return "You own " + p.qty + " shares of " + t + ", so you can sell at most " + p.qty + ".";
+      S.cash += qty * price - FEE; S.realized += (price - p.cost) * qty - FEE; p.qty -= qty;
+    } else if (side === "short") {
+      if (p.qty > 0) return "You own " + t + ". Sell your shares before opening a short.";
+      const need = qty * price * MARGIN + FEE;
+      if (need > T.bp + 1e-9) return "Not enough buying power for this short. It needs " + fmt(need) + " in margin and you have " + fmt(Math.max(T.bp, 0)) + ".";
+      const sh = -p.qty;
+      S.cash += qty * price - FEE; p.cost = (p.cost * sh + qty * price - FEE) / (sh + qty); p.qty -= qty;
+    } else if (side === "cover") {
+      if (p.qty >= 0) return "You have no short position in " + t + " to cover.";
+      if (qty > -p.qty) return "You're short " + (-p.qty) + " shares of " + t + ", so you can cover at most " + (-p.qty) + ".";
+      const total = qty * price + FEE;
+      if (total > S.cash + 1e-9) return "Not enough cash to cover. This needs " + fmt(total) + ".";
+      S.cash -= total; S.realized += (p.cost - price) * qty - FEE; p.qty += qty;
+    }
+    if (p.qty === 0) delete S.pos[t]; else S.pos[t] = p;
+    return null;
+  }
+  const VERB = { buy: "Bought", sell: "Sold", short: "Sold short", cover: "Covered" };
+  function fillLimits(t) {
+    const price = px(t); if (price == null) return false;
+    let changed = false;
+    S.orders.forEach((o) => {
+      if (o.status !== "Open" || o.t !== t) return;
+      const buying = o.side === "buy" || o.side === "cover";
+      if ((buying && price <= o.limit) || (!buying && price >= o.limit)) {
+        const err = execute(o.side, o.t, o.qty, price); changed = true;
+        if (err) { o.status = "Rejected"; addLog("Limit order for " + o.qty + " " + o.t + " rejected: " + err); }
+        else { o.status = "Filled"; o.price = price; o.time = nowStr(); addLog("Limit order filled: " + VERB[o.side].toLowerCase() + " " + o.qty + " " + o.t + " at " + fmt(price) + "."); }
+      }
+    });
+    if (changed) save();
+    return changed;
+  }
+
+  // ---------- Finnhub ----------
+  function banner(kind, title, text) {
+    const b = $("banner"); if (!kind) { b.hidden = true; b.dataset.kind = ""; return; }
+    b.hidden = false; b.className = "banner " + kind; b.dataset.kind = title;
+    b.innerHTML = "<b>" + esc(title) + "</b><span>" + esc(text || "") + "</span>";
+  }
+  class ApiErr extends Error { constructor(kind, msg) { super(msg); this.kind = kind; } }
+  async function api(path, params) {
+    if (!apiKey) throw new ApiErr("nokey", "Add your Finnhub API key to load prices.");
+    const qs = new URLSearchParams(Object.assign({}, params, { token: apiKey }));
+    let r;
+    try { r = await fetch(API + path + "?" + qs.toString()); }
+    catch (e) { throw new ApiErr("network", "Couldn't reach Finnhub. Check your internet connection."); }
+    if (r.status === 401 || r.status === 403) {
+      let t = ""; try { t = (await r.json()).error || ""; } catch (e) {}
+      if (/access/i.test(t)) throw new ApiErr("plan", "Your Finnhub plan doesn't include this data.");
+      throw new ApiErr("badkey", "Finnhub rejected the API key. Check it and connect again.");
+    }
+    if (r.status === 429) throw new ApiErr("limit", "Finnhub's rate limit was hit (60 requests a minute on the free plan). Prices resume shortly.");
+    if (!r.ok) throw new ApiErr("server", "Finnhub returned an error (" + r.status + "). Trying again soon.");
+    return r.json();
+  }
+  async function fetchQuote(sym) {
+    const d = await api("/quote", { symbol: sym });
+    if (!d || !d.c) throw new ApiErr("notfound", "Finnhub has no quote for " + sym + ". Check the symbol (US stocks only on the free plan).");
+    const prevLive = Q[sym] && Q[sym].live && Date.now() - Q[sym].updatedAt < 60000;
+    Q[sym] = Object.assign(Q[sym] || {}, { open: d.o, high: d.h, low: d.l, prev: d.pc, ts: d.t * 1000 });
+    if (!prevLive) { Q[sym].price = d.c; Q[sym].updatedAt = Date.now(); Q[sym].live = false; }
+    Q[sym].change = Q[sym].price - d.pc; Q[sym].changePct = d.pc ? (Q[sym].price / d.pc - 1) * 100 : 0;
+    pushTick(sym, Date.now(), Q[sym].price);
+    return Q[sym];
+  }
+  function pushTick(sym, ms, price) {
+    const arr = TK[sym] || (TK[sym] = []);
+    const last = arr[arr.length - 1];
+    if (last && ms - last[0] < 2000) { last[1] = price; last[0] = ms; }   // merge bursts into ~2s buckets
+    else arr.push([ms, price]);
+    if (arr.length > MAXPTS) arr.splice(0, arr.length - MAXPTS);
+    saveTicks();
+  }
+
+  let marketOpen = null;
+  async function fetchMarket() {
+    try {
+      const m = await api("/stock/market-status", { exchange: "US" });
+      marketOpen = !!m.isOpen;
+      const sess = m.session ? (m.session === "regular" ? "regular hours" : m.session.replace("-", " ")) : "";
+      $("mkt").textContent = "US market " + (m.isOpen ? "open" : "closed") + (sess && m.isOpen ? " · " + sess : "") + (m.holiday ? " · " + m.holiday : "");
+    } catch (e) { if (e.kind === "badkey") onBadKey(e); }
+  }
+
+  let polling = false;
+  async function refreshQuotes(list) {
+    if (polling || !apiKey) return;
+    polling = true;
+    let ok = 0, err = null;
+    for (const sym of list || S.watch) {
+      try { await fetchQuote(sym); fillLimits(sym); ok++; }
+      catch (e) {
+        if (e.kind === "notfound") { addLog(e.message); continue; }
+        err = e; break;
+      }
+      await sleep(250);
+    }
+    polling = false;
+    if (err) {
+      if (err.kind === "badkey") onBadKey(err);
+      else banner("warn", err.message, ok ? "Showing the latest prices that did load." : "Prices shown are from your last session.");
+    } else if (ok && $("banner").dataset.kind && !/Margin/.test($("banner").dataset.kind)) banner(null);
+    lsSet(QKEY, Q);
+    scheduleRender();
+  }
+
+  // ---------- WebSocket stream ----------
+  let ws = null, wsState = "off", wsRetry = 0, subs = new Set();
+  function setDot(state) { wsState = state; const d = $("liveDot"); d.className = "live-dot " + state; d.title = { live: "Streaming live trades", connecting: "Connecting to live stream", off: "Live stream off" }[state] || ""; }
+  function connectWs() {
+    if (!apiKey) return;
+    try { if (ws) ws.close(); } catch (e) {}
+    subs = new Set(); setDot("connecting");
+    try { ws = new WebSocket(WS + "?token=" + encodeURIComponent(apiKey)); } catch (e) { setDot("off"); return; }
+    ws.onopen = () => { wsRetry = 0; setDot("live"); S.watch.forEach(sub); };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (m.type === "error") { addLog("Live stream: " + (m.msg || "error")); return; }
+      if (m.type !== "trade" || !Array.isArray(m.data)) return;
+      const latest = {};
+      m.data.forEach((tr) => { if (!latest[tr.s] || tr.t >= latest[tr.s].t) latest[tr.s] = tr; });
+      Object.keys(latest).forEach((sym) => {
+        if (!S.watch.includes(sym)) return;
+        const tr = latest[sym], q = Q[sym] || (Q[sym] = {});
+        q.price = tr.p; q.updatedAt = Date.now(); q.live = true;
+        if (q.prev) { q.change = tr.p - q.prev; q.changePct = (tr.p / q.prev - 1) * 100; }
+        if (q.high != null && tr.p > q.high) q.high = tr.p;
+        if (q.low != null && q.low > 0 && tr.p < q.low) q.low = tr.p;
+        pushTick(sym, tr.t || Date.now(), tr.p);
+        fillLimits(sym);
+      });
+      scheduleRender();
+    };
+    ws.onclose = () => {
+      setDot("off"); ws = null;
+      if (!apiKey) return;
+      const wait = Math.min(30000, 2000 * Math.pow(2, wsRetry++)) + Math.random() * 1000;
+      setTimeout(() => { if (!ws && apiKey) connectWs(); }, wait);
+    };
+    ws.onerror = () => {};
+  }
+  function sub(sym) { if (ws && ws.readyState === 1 && !subs.has(sym)) { ws.send(JSON.stringify({ type: "subscribe", symbol: sym })); subs.add(sym); } }
+  function unsub(sym) { if (ws && ws.readyState === 1 && subs.has(sym)) { ws.send(JSON.stringify({ type: "unsubscribe", symbol: sym })); subs.delete(sym); } }
+
+  // ---------- key handling ----------
+  function showKeyForm(show) { $("keyForm").hidden = !show; if (show) setTimeout(() => $("keyInput").focus(), 0); }
+  function onBadKey(e) {
+    showKeyForm(true); $("keyMsg").className = "addmsg err"; $("keyMsg").textContent = e.message;
+    banner("err", "Finnhub API key not accepted.", "Paste a valid key above to load prices.");
+  }
+  $("keyBtn").onclick = () => { $("keyInput").value = apiKey; showKeyForm($("keyForm").hidden); };
+  $("keyForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const k = $("keyInput").value.trim(), m = $("keyMsg");
+    if (!k) { m.className = "addmsg err"; m.textContent = "Paste your API key from the Finnhub dashboard."; return; }
+    apiKey = k; m.className = "addmsg"; m.textContent = "Checking key…";
+    try {
+      await fetchQuote(S.watch[0] || "AAPL");
+      lsSet(KKEY, apiKey); m.textContent = ""; showKeyForm(false); banner(null);
+      addLog("Connected to Finnhub."); save(); start();
+    } catch (err) {
+      m.className = "addmsg err"; m.textContent = err.message;
+      if (err.kind === "badkey") { apiKey = ""; lsSet(KKEY, ""); }
+    }
+  });
+
+  // ---------- watchlist ----------
+  $("addForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const sym = $("addSym").value.trim().toUpperCase(), m = $("addMsg");
+    if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym)) { m.className = "addmsg err"; m.textContent = "Enter a ticker symbol like NFLX or BRK.B."; return; }
+    if (S.watch.includes(sym)) { S.sel = sym; m.className = "addmsg"; m.textContent = sym + " is already on your list."; save(); render(); return; }
+    if (!apiKey) { m.className = "addmsg err"; m.textContent = "Connect your Finnhub key first."; showKeyForm(true); return; }
+    $("addBtn").disabled = true; m.className = "addmsg"; m.textContent = "Looking up " + sym + "…";
+    try {
+      await fetchQuote(sym);
+      S.watch.push(sym); S.sel = sym; $("addSym").value = ""; m.textContent = "Added " + sym + "."; sub(sym);
+      lsSet(QKEY, Q); save(); render();
+    } catch (err) { m.className = "addmsg err"; m.textContent = err.message; }
+    $("addBtn").disabled = false;
+  });
+  $("watch").addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-rm]");
+    if (rm) {
+      const t = rm.dataset.rm;
+      if (S.pos[t]) { $("addMsg").className = "addmsg err"; $("addMsg").textContent = "Close your " + t + " position before removing it."; return; }
+      S.watch = S.watch.filter((x) => x !== t); unsub(t);
+      S.orders.forEach((o) => { if (o.t === t && o.status === "Open") o.status = "Cancelled"; });
+      if (S.sel === t) S.sel = S.watch[0] || "";
+      save(); render(); return;
+    }
+    const pk = e.target.closest("[data-pick]");
+    if (pk) { S.sel = pk.dataset.pick; $("msg").textContent = ""; if ($("otype").value === "limit" && px(S.sel)) $("limitPx").value = px(S.sel).toFixed(2); setSide(bestSideFor(S.sel)); save(); render(); }
+  });
+
+  // ---------- ticket ----------
+  let side = "buy";
+  const SIDE_HINT = { buy: "Buy shares, profiting if the price rises.", sell: "Sell shares you own.", short: "Borrow and sell shares now, profiting if the price falls.", cover: "Buy back shares to close a short position." };
+  const bestSideFor = (t) => { const p = S.pos[t]; return p && p.qty < 0 ? "cover" : "buy"; };
+  function setSide(sd) {
+    side = sd;
+    document.querySelectorAll(".side button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.side === sd));
+    $("submit").dataset.side = sd; $("sideHint").textContent = SIDE_HINT[sd]; updateTicket();
+  }
+  document.querySelectorAll(".side button").forEach((b) => b.onclick = () => setSide(b.dataset.side));
+  $("otype").onchange = () => { const lim = $("otype").value === "limit"; $("limitField").hidden = !lim; if (lim && px(S.sel)) $("limitPx").value = px(S.sel).toFixed(2); updateTicket(); };
+  $("qty").oninput = updateTicket; $("limitPx").oninput = updateTicket;
+  document.querySelectorAll(".qty-row button").forEach((b) => b.onclick = () => {
+    const f = +b.dataset.frac, price = orderPx(), p = S.pos[S.sel] || { qty: 0 }, T = totals(); let q = 0;
+    if (!price) return;
+    if (side === "buy") q = Math.floor((T.bp - FEE) / price * f);
+    else if (side === "short") q = Math.floor((T.bp - FEE) / (price * MARGIN) * f);
+    else if (side === "sell") q = Math.floor(Math.max(p.qty, 0) * f);
+    else q = Math.floor(Math.max(-p.qty, 0) * f);
+    $("qty").value = Math.max(q, 0); updateTicket();
+  });
+  const orderPx = () => ($("otype").value === "limit" ? (+$("limitPx").value || px(S.sel)) : px(S.sel));
+  function updateTicket() {
+    const q = Math.floor(+$("qty").value || 0), price = orderPx(), p = S.pos[S.sel];
+    document.querySelectorAll(".side button").forEach((b) => {
+      const sd = b.dataset.side;
+      b.disabled = !S.sel || (sd === "sell" && !(p && p.qty > 0)) || (sd === "cover" && !(p && p.qty < 0)) || (sd === "buy" && p && p.qty < 0) || (sd === "short" && p && p.qty > 0);
+    });
+    $("eP").textContent = price ? fmt(price) : "—";
+    $("eLbl").textContent = { buy: "Estimated cost", sell: "Estimated proceeds", short: "Proceeds (margin held: " + (price && q ? fmt(q * price * MARGIN) : "—") + ")", cover: "Estimated cost" }[side];
+    $("eT").textContent = q > 0 && price ? fmt(side === "buy" || side === "cover" ? q * price + FEE : q * price - FEE) : "—";
+    $("eOwn").textContent = !p ? "none" : p.qty > 0 ? p.qty + " long" : (-p.qty) + " short";
+    const verbs = { buy: "Buy", sell: "Sell", short: "Sell short", cover: "Buy to cover" };
+    $("submit").textContent = q > 0 && S.sel ? verbs[side] + " " + q + " " + S.sel + ($("otype").value === "limit" ? " at limit" : "") : verbs[side];
+    const sb = document.querySelector('.side button[data-side="' + side + '"]');
+    $("submit").disabled = !(q > 0) || !price || (sb && sb.disabled);
+  }
+  $("ticket").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = Math.floor(+$("qty").value || 0), t = S.sel, m = $("msg");
+    if (q <= 0 || !t) return;
+    if (!px(t)) { m.className = "msg err"; m.textContent = "There's no price for " + t + " yet. Connect your Finnhub key first."; return; }
+    if ($("otype").value === "limit") {
+      const lim = +$("limitPx").value;
+      if (!(lim > 0)) { m.className = "msg err"; m.textContent = "Enter a limit price above $0."; return; }
+      S.orders.unshift({ id: S.seq++, time: nowStr(), side, t, qty: q, limit: lim, price: lim, status: "Open" });
+      const buying = side === "buy" || side === "cover";
+      m.className = "msg ok"; m.textContent = "Limit order placed. It fills when " + t + " trades at " + fmt(lim) + (buying ? " or lower." : " or higher.");
+      fillLimits(t);
+    } else {
+      const price = px(t), err = execute(side, t, q, price);
+      if (err) { m.className = "msg err"; m.textContent = err; return; }
+      S.orders.unshift({ id: S.seq++, time: nowStr(), side, t, qty: q, price, status: "Filled" });
+      m.className = "msg ok"; m.textContent = VERB[side] + " " + q + " " + t + " at " + fmt(price) + ".";
+      addLog(VERB[side] + " " + q + " " + t + " at " + fmt(price) + ".");
+    }
+    S.orders = S.orders.slice(0, 60);
+    if (!S.pos[t] && (side === "sell" || side === "cover")) setSide("buy");
+    save(); render();
+  });
+  $("orders").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-cancel]"); if (!b) return;
+    const o = S.orders.find((x) => x.id === +b.dataset.cancel); if (o && o.status === "Open") { o.status = "Cancelled"; save(); render(); }
+  });
+  function resetIdle() { $("resetBox").innerHTML = '<button class="btn" id="resetBtn" type="button">Reset account</button>'; $("resetBtn").onclick = askReset; }
+  function askReset() {
+    $("resetBox").innerHTML = '<span class="controls">Start over with $100,000? <button class="btn danger" id="rYes" type="button">Reset</button><button class="btn" id="rNo" type="button">Keep</button></span>';
+    $("rYes").onclick = () => { const w = S.watch, sel = S.sel; S = fresh(); S.watch = w; S.sel = sel; addLog("Account reset to " + fmt(START_CASH) + " in cash."); save(); resetIdle(); $("msg").textContent = ""; setSide("buy"); render(); };
+    $("rNo").onclick = resetIdle;
+  }
+  $("resetBtn").onclick = askReset;
+
+  // ---------- rendering ----------
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  function niceStep(x) { const p = Math.pow(10, Math.floor(Math.log10(x))), f = x / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+  function hexA(hex, a) { const m = hex.replace("#", ""); if (m.length !== 6) return hex; return "rgba(" + parseInt(m.slice(0, 2), 16) + "," + parseInt(m.slice(2, 4), 16) + "," + parseInt(m.slice(4, 6), 16) + "," + a + ")"; }
+
+  function renderChart() {
+    const cv = $("chart"), msg = $("chartMsg"), sym = S.sel, pts = (TK[sym] || []), q = Q[sym];
+    if (pts.length < 2) {
+      cv.hidden = true; msg.hidden = false; $("hiLo").textContent = "";
+      msg.textContent = !sym ? "Add a stock to your watchlist to see its chart." : !apiKey ? "Connect your Finnhub key to start collecting live prices." :
+        "Collecting live prices for " + sym + ". The chart fills in as trades come through" + (marketOpen === false ? " (the market is closed, so it will start at the next open)." : ".");
+      return;
+    }
+    cv.hidden = false; msg.hidden = true;
+    const d = pts.map((x) => x[1]), pos = S.pos[sym], prev = q && q.prev;
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, hh = cv.clientHeight;
+    if (cv.width !== w * dpr || cv.height !== hh * dpr) { cv.width = w * dpr; cv.height = hh * dpr; }
+    const c = cv.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, hh);
+    let lo = Math.min(...d), hi = Math.max(...d);
+    if (pos) { lo = Math.min(lo, pos.cost); hi = Math.max(hi, pos.cost); }
+    if (prev) { lo = Math.min(lo, prev); hi = Math.max(hi, prev); }
+    const pad = (hi - lo) * 0.08 || Math.max(hi * 0.002, 0.05); lo -= pad; hi += pad;
+    const t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1;
+    const L = 4, R = 62, T = 8, B = 22, pw = w - L - R, ph = hh - T - B;
+    const X = (t) => L + (t1 === t0 ? 1 : (t - t0) / (t1 - t0)) * pw, Y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
+    const muted = css("--muted"), line = css("--line"), accent = css("--accent");
+    c.font = "11px " + css("--f-mono"); c.fillStyle = muted; c.textBaseline = "middle";
+    const step = niceStep((hi - lo) / 4);
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+      const y = Y(v); c.strokeStyle = line; c.lineWidth = 1; c.beginPath(); c.moveTo(L, y); c.lineTo(L + pw, y); c.stroke();
+      c.fillText(v.toFixed(step < 1 ? 2 : 0), L + pw + 8, y);
+    }
+    c.textBaseline = "top";
+    c.textAlign = "left"; c.fillText(tfmt(t0, false).replace(/:\d\d (?=[AP]M)/, " "), L, T + ph + 6);
+    c.textAlign = "right"; c.fillText(tfmt(t1, false).replace(/:\d\d (?=[AP]M)/, " "), L + pw, T + ph + 6);
+    c.textAlign = "left";
+    const grad = c.createLinearGradient(0, T, 0, T + ph); grad.addColorStop(0, hexA(accent, 0.22)); grad.addColorStop(1, hexA(accent, 0));
+    c.beginPath(); pts.forEach((p, i) => { i ? c.lineTo(X(p[0]), Y(p[1])) : c.moveTo(X(p[0]), Y(p[1])); });
+    c.lineTo(X(t1), T + ph); c.lineTo(X(t0), T + ph); c.closePath(); c.fillStyle = grad; c.fill();
+    c.beginPath(); pts.forEach((p, i) => { i ? c.lineTo(X(p[0]), Y(p[1])) : c.moveTo(X(p[0]), Y(p[1])); });
+    c.strokeStyle = accent; c.lineWidth = 2; c.lineJoin = "round"; c.stroke();
+    if (prev) { const y = Y(prev); c.setLineDash([2, 3]); c.strokeStyle = muted; c.lineWidth = 1; c.beginPath(); c.moveTo(L, y); c.lineTo(L + pw, y); c.stroke(); c.setLineDash([]); }
+    if (pos) { const y = Y(pos.cost); c.setLineDash([6, 4]); c.strokeStyle = css("--ink"); c.globalAlpha = 0.55; c.lineWidth = 1.2; c.beginPath(); c.moveTo(L, y); c.lineTo(L + pw, y); c.stroke(); c.setLineDash([]); c.globalAlpha = 1; }
+    const ex = X(t1), ey = Y(d[d.length - 1]);
+    c.beginPath(); c.arc(ex, ey, 7, 0, Math.PI * 2); c.fillStyle = hexA(accent, 0.2); c.fill();
+    c.beginPath(); c.arc(ex, ey, 4, 0, Math.PI * 2); c.fillStyle = accent; c.fill();
+    $("hiLo").textContent = "Range " + fmt(Math.min(...d)) + " – " + fmt(Math.max(...d));
+  }
+
+  const prevPrice = {};
+  let renderQueued = false, lastRender = 0;
+  function scheduleRender() {
+    if (renderQueued) return; renderQueued = true;
+    const wait = Math.max(0, 400 - (Date.now() - lastRender));
+    setTimeout(() => requestAnimationFrame(() => { renderQueued = false; render(); }), wait);
+  }
+  function render() {
+    lastRender = Date.now();
+    const times = S.watch.map((s) => Q[s] && Q[s].updatedAt).filter(Boolean);
+    $("stamp").textContent = !apiKey ? "Not connected" : times.length ? "Last price " + tfmt(Math.max(...times), false) : "Waiting for prices";
+    $("wCount").textContent = S.watch.length + (S.watch.length === 1 ? " stock" : " stocks");
+    $("watch").innerHTML = S.watch.length ? S.watch.map((t) => {
+      const q = Q[t], p = S.pos[t];
+      const tag = p ? (p.qty > 0 ? '<span class="tag long">LONG</span>' : '<span class="tag short">SHORT</span>') : "";
+      let flash = "";
+      if (q && q.price && prevPrice[t] != null && q.price !== prevPrice[t]) flash = q.price > prevPrice[t] ? " flash-up" : " flash-down";
+      if (q && q.price) prevPrice[t] = q.price;
+      return '<li class="' + (t === S.sel ? "sel" : "") + '"><button type="button" class="pick" data-pick="' + esc(t) + '" aria-current="' + (t === S.sel) + '">' +
+        '<span style="min-width:0"><span class="tk">' + esc(t) + "</span>" + tag + '<div class="sm">' + (q && q.price ? (q.live ? "live · " : "quote · ") + tfmt(q.updatedAt, false) : "no price yet") + "</div></span>" +
+        '<span class="px' + flash + '">' + (q && q.price ? q.price.toFixed(2) : "—") + '<div class="chg ' + (q ? cls(q.changePct) : "") + '">' + (q && q.prev ? pct(q.changePct) : "") + "</div></span></button>" +
+        '<button type="button" class="rm" data-rm="' + esc(t) + '" aria-label="Remove ' + esc(t) + '">×</button></li>';
+    }).join("") : '<li><div class="empty">Your watchlist is empty. Add a symbol above.</div></li>';
+    const t = S.sel, q = Q[t];
+    $("qTk").textContent = t || "—"; $("qPx").textContent = q && q.price ? fmt(q.price) : "—";
+    $("qChg").textContent = q && q.prev ? sgn(q.change) + " (" + pct(q.changePct) + ") today" : ""; $("qChg").className = "num " + (q ? cls(q.change) : "");
+    $("qMeta").textContent = q && q.price ? (q.live ? "Live trade price" : "Latest quote") + " · updated " + tfmt(q.updatedAt, true) : t ? "No price loaded for " + t + " yet." : "";
+    $("ohlc").innerHTML = q && q.prev ? [["Open", q.open], ["High", q.high], ["Low", q.low], ["Prev close", q.prev]].map((a) => "<span>" + a[0] + " <b>" + (a[1] ? a[1].toFixed(2) : "—") + "</b></span>").join("") : "";
+    const pos = S.pos[t];
+    $("costLegend").hidden = !pos; $("costLabel").textContent = pos && pos.qty < 0 ? "Your short entry price" : "Your average cost";
+    renderChart();
+    const T = totals(), rows = [];
+    Object.keys(S.pos).forEach((s) => {
+      const p = S.pos[s], price = px(s) ?? p.cost, n = Math.abs(p.qty), isShort = p.qty < 0;
+      const pl = isShort ? (p.cost - price) * n : (price - p.cost) * n;
+      rows.push('<tr><td><span class="tk">' + esc(s) + '</span></td><td><span class="pill ' + (isShort ? "short" : "buy") + '">' + (isShort ? "SHORT" : "LONG") + '</span></td><td class="r num">' + n +
+        '</td><td class="r num">' + fmt(p.cost) + '</td><td class="r num">' + (px(s) != null ? fmt(price) : "—") + '</td><td class="r num">' + fmt(isShort ? -n * price : n * price) +
+        '</td><td class="r num ' + cls(pl) + '">' + sgn(pl) + '</td><td class="r num ' + cls(pl) + '">' + pct(pl / (p.cost * n) * 100) + "</td></tr>");
+    });
+    $("holdings").innerHTML = rows.length ? rows.join("") : '<tr><td colspan="8" class="empty">No open positions. Pick a stock, then Buy to go long or Sell short to bet on a decline.</td></tr>';
+    $("hCount").textContent = rows.length + " open";
+    const tch = T.equity - START_CASH;
+    $("sTotal").textContent = fmt(T.equity); $("sTotalD").textContent = sgn(tch) + " (" + pct(tch / START_CASH * 100) + ") all time"; $("sTotalD").className = "delta " + cls(tch);
+    $("sCash").textContent = fmt(S.cash);
+    $("sBP").textContent = fmt(T.bp); $("sBP").className = "val " + (T.bp < 0 ? "down" : "");
+    $("sBPD").textContent = T.shortVal ? fmt(T.shortVal * (1 + MARGIN)) + " held for shorts" : "available for new trades";
+    $("sUnreal").textContent = sgn(T.unreal); $("sUnreal").className = "val " + cls(T.unreal);
+    $("sUnrealD").textContent = T.basis ? pct(T.unreal / T.basis * 100) + " on open positions" : "no open positions"; $("sUnrealD").className = "delta " + cls(T.unreal);
+    $("sReal").textContent = sgn(S.realized); $("sReal").className = "val " + cls(S.realized);
+    if (T.bp < 0 && $("banner").hidden) banner("warn", "Margin warning.", "Your shorts have risen and buying power is " + fmt(T.bp) + ". Cover some shorts or sell long positions to bring it back above $0.");
+    else if (T.bp >= 0 && $("banner").dataset.kind === "Margin warning.") banner(null);
+    const open = S.orders.filter((o) => o.status === "Open").length;
+    $("oCount").textContent = open ? open + " open" : S.orders.length + " total";
+    const LBL = { buy: "BUY", sell: "SELL", short: "SHORT", cover: "COVER" };
+    $("orders").innerHTML = S.orders.length ? S.orders.slice(0, 20).map((o) =>
+      '<tr><td class="num" style="color:var(--muted)">' + esc(o.time) + '</td><td><span class="pill ' + o.side + '">' + LBL[o.side] + '</span></td><td class="tk">' + esc(o.t) +
+      '</td><td class="r num">' + o.qty + '</td><td class="r num">' + fmt(o.price) + (o.status === "Open" ? " lim" : "") + "</td><td>" +
+      (o.status === "Open" ? 'Open <button type="button" class="btn" style="padding:2px 7px;margin-left:4px" data-cancel="' + o.id + '">Cancel</button>' : o.status) + "</td></tr>").join("")
+      : '<tr><td colspan="6" class="empty">Your filled and open orders will appear here.</td></tr>';
+    $("log").innerHTML = S.log.slice(0, 8).map((n) => '<li><span class="t">' + esc(n.time) + "</span><span>" + esc(n.text) + "</span></li>").join("");
+    updateTicket();
+  }
+
+  // ---------- boot ----------
+  let pollTimer = null, mktTimer = null;
+  function start() {
+    clearInterval(pollTimer); clearInterval(mktTimer);
+    fetchMarket(); refreshQuotes(); connectWs();
+    pollTimer = setInterval(() => { if (!document.hidden) refreshQuotes(); }, 30000);
+    mktTimer = setInterval(fetchMarket, 5 * 60000);
+  }
+  setSide(bestSideFor(S.sel));
+  render();
+  window.addEventListener("resize", renderChart);
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && apiKey) refreshQuotes(); });
+  if (apiKey) start(); else { showKeyForm(true); setDot("off"); }
+})();
+</script>
+</body>
+</html>
