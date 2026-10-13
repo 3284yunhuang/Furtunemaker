@@ -26,10 +26,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_DIR: ${{ vars.FTP_DIR || 'public_html/news' }}
+          UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
+          UPLOAD_URL: https://furtunemaker.com/news-upload.php
           ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID || '99Hm6N8psCBzc1JwEVR2' }}
           SCRIPT_SECONDS: ${{ vars.SCRIPT_SECONDS || '45' }}
         run: python make_news.py
