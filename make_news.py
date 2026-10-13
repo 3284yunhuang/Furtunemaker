@@ -170,7 +170,7 @@ def ftp_connect():
     port = 21
     if host.count(":") == 1:  # "host:port"
         host, port = host.split(":")[0], int(host.split(":")[1])
-    user, pw = os.environ["FTP_USER"].strip(), os.environ["FTP_PASSWORD"]
+    user, pw = os.environ["FTP_USER"].strip(), os.environ["FTP_PASSWORD"].strip("\r\n")
     # GitHub's servers have no IPv6, so always connect over IPv4.
     try:
         ip = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
@@ -198,7 +198,17 @@ def ftp_connect():
 
 
 def ftp_cd(ftp, path):
-    for part in [p for p in path.split("/") if p]:
+    parts = [p for p in path.split("/") if p]
+    # Some FTP accounts already start inside public_html; don't create public_html/public_html.
+    if parts and parts[0] == "public_html":
+        try:
+            names = [n.rsplit("/", 1)[-1] for n in ftp.nlst()]
+        except Exception:
+            names = []
+        if "public_html" not in names:
+            log("FTP account already starts inside public_html")
+            parts = parts[1:]
+    for part in parts:
         try:
             ftp.cwd(part)
         except ftplib.error_perm:
