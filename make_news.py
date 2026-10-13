@@ -35,6 +35,7 @@ TTS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 SCRIPT_SECONDS = int(os.environ.get("SCRIPT_SECONDS", "45"))
 FTP_DIR = os.environ.get("FTP_DIR", "public_html/news")
 KEEP_DAYS = 30
+ANCHOR = ROOT / "anchor.mp4" if (ROOT / "anchor.mp4").exists() else ROOT / "assets" / "anchor.mp4"
 
 today = dt.datetime.now(zoneinfo.ZoneInfo("America/New_York")).date()
 stamp = today.isoformat()
@@ -42,6 +43,47 @@ stamp = today.isoformat()
 
 def log(msg):
     print(f"[news] {msg}", flush=True)
+
+
+def fail(title, msg):
+    """Show a clear error on the GitHub run page, then stop."""
+    print(f"::error title={title}::{msg}", flush=True)
+    print(f"[news] FAILED - {title}: {msg}", flush=True)
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------- 0. checks before spending anything
+def preflight():
+    missing = [k for k in ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY", "FTP_HOST", "FTP_USER", "FTP_PASSWORD")
+               if not os.environ.get(k, "").strip()]
+    if missing:
+        fail("Missing GitHub secret", "These secrets are empty or misspelled: " + ", ".join(missing)
+             + ". Check Settings > Secrets and variables > Actions (names must match exactly).")
+    if not ANCHOR.exists():
+        fail("Missing anchor video", "anchor.mp4 was not found in the repository. Upload it next to make_news.py.")
+
+    # ElevenLabs key + voice
+    try:
+        r = requests.get(f"https://api.elevenlabs.io/v1/voices/{VOICE_ID}",
+                         headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"].strip()}, timeout=30)
+    except requests.RequestException as e:
+        fail("ElevenLabs unreachable", str(e))
+    if r.status_code == 401:
+        fail("ElevenLabs key rejected", "ELEVENLABS_API_KEY is wrong or lacks permission (needs Text to Speech and Voices read). "
+             + r.text[:200])
+    if r.status_code != 200:
+        fail("ElevenLabs voice not available", f"Voice {VOICE_ID} (Riley) returned {r.status_code}. "
+             "In ElevenLabs open Voice Library, find Riley, click 'Add to My Voices'. " + r.text[:200])
+    log("ElevenLabs key and voice OK")
+
+    # FTP login
+    try:
+        ftp = ftp_connect()
+        ftp.quit()
+    except Exception as e:
+        fail("Hostinger FTP login failed", f"{type(e).__name__}: {e}. Check FTP_HOST (e.g. ftp.furtunemaker.com or the IP shown in hPanel), "
+             "FTP_USER and FTP_PASSWORD.")
+    log("Hostinger FTP login OK")
 
 
 # ---------------------------------------------------------------- 1. news + script
@@ -61,7 +103,7 @@ If US markets were closed today, say so in the script and cover the biggest fina
     r = requests.post(
         "https://api.anthropic.com/v1/messages",
         headers={
-            "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+            "x-api-key": os.environ["ANTHROPIC_API_KEY"].strip(),
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         },
@@ -73,12 +115,18 @@ If US markets were closed today, say so in the script and cover the biggest fina
         },
         timeout=300,
     )
-    r.raise_for_status()
+    if r.status_code != 200:
+        detail = r.text[:300]
+        if r.status_code == 401:
+            fail("Claude API key rejected", "ANTHROPIC_API_KEY is wrong. Create a new key at platform.claude.com. " + detail)
+        if "credit" in detail.lower():
+            fail("Claude API has no credit", "Add credit under Billing at platform.claude.com. " + detail)
+        fail(f"Claude API error {r.status_code}", detail)
     blocks = r.json()["content"]
     text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
     m = re.search(r"<json>(.*?)</json>", text, re.S) or re.search(r"(\{.*\})", text, re.S)
     if not m:
-        sys.exit(f"Could not find JSON in Claude reply:\n{text[:2000]}")
+        fail("Could not read Claude's reply", text[:300].replace("\n", " "))
     data = json.loads(m.group(1))
     assert data.get("script") and data.get("headlines"), "Claude reply is missing script/headlines"
     return data
@@ -89,12 +137,12 @@ def make_voice(script, path):
     r = requests.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}",
         params={"output_format": "mp3_44100_128"},
-        headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"], "content-type": "application/json"},
+        headers={"xi-api-key": os.environ["ELEVENLABS_API_KEY"].strip(), "content-type": "application/json"},
         json={"text": script, "model_id": TTS_MODEL},
         timeout=300,
     )
     if r.status_code != 200:
-        sys.exit(f"ElevenLabs error {r.status_code}: {r.text[:500]}")
+        fail(f"ElevenLabs speech error {r.status_code}", r.text[:300])
     path.write_bytes(r.content)
 
 
@@ -103,7 +151,7 @@ def make_video(voice, path):
     subprocess.run(
         [
             "ffmpeg", "-y", "-v", "error",
-            "-stream_loop", "-1", "-i", str(ROOT / "anchor.mp4" if (ROOT / "anchor.mp4").exists() else ROOT / "assets" / "anchor.mp4"),
+            "-stream_loop", "-1", "-i", str(ANCHOR),
             "-i", str(voice),
             "-map", "0:v:0", "-map", "1:a:0",
             "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p",
@@ -117,7 +165,8 @@ def make_video(voice, path):
 
 # ---------------------------------------------------------------- 4. upload
 def ftp_connect():
-    host, user, pw = os.environ["FTP_HOST"], os.environ["FTP_USER"], os.environ["FTP_PASSWORD"]
+    host = os.environ["FTP_HOST"].strip().removeprefix("ftp://").rstrip("/")
+    user, pw = os.environ["FTP_USER"].strip(), os.environ["FTP_PASSWORD"]
     try:
         ftp = ftplib.FTP_TLS(host, timeout=60)
         ftp.login(user, pw)
@@ -169,6 +218,8 @@ def upload(video, entry):
 
 def main():
     log(f"Making market news for {stamp}")
+    if os.environ.get("DRY_RUN") != "1":
+        preflight()
     news = get_news()
     log("Script: " + news["script"][:120] + "...")
     voice = OUT / f"voice-{stamp}.mp3"
@@ -189,7 +240,10 @@ def main():
     if os.environ.get("DRY_RUN") == "1":
         log("DRY_RUN=1, skipping upload")
         return
-    upload(video, entry)
+    try:
+        upload(video, entry)
+    except Exception as e:
+        fail("Upload to Hostinger failed", f"{type(e).__name__}: {e}. If the folder is wrong, set variable FTP_DIR (now '{FTP_DIR}').")
     log(f"Uploaded to {FTP_DIR}/{video.name}")
 
 
