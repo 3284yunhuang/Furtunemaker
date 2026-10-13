@@ -1,0 +1,43 @@
+name: Daily market news video
+
+on:
+  schedule:
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  make-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packages
+        run: pip install requests
+
+      - name: Make and upload today's video
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_DIR: ${{ vars.FTP_DIR || 'public_html/news' }}
+          ELEVENLABS_VOICE_ID: ${{ vars.ELEVENLABS_VOICE_ID || '99Hm6N8psCBzc1JwEVR2' }}
+          SCRIPT_SECONDS: ${{ vars.SCRIPT_SECONDS || '45' }}
+        run: python make_news.py
+
+      - name: Keep a copy in GitHub (7 days)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-news
+          path: output/
+          retention-days: 7
