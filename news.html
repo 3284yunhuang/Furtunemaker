@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market News | FurtuneMaker</title>
+<style>
+  :root { --bg:#0b1424; --card:#121f36; --line:#22314d; --text:#e8eef8; --muted:#93a3bd; --accent:#3fd0a8; --red:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; padding:32px 16px 64px; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--red); box-shadow:0 0 0 4px rgba(255,107,107,.18); }
+  h1 { margin:8px 0 20px; font-size:clamp(26px,4vw,38px); line-height:1.15; }
+  video { width:100%; aspect-ratio:16/9; background:#000; border-radius:14px; display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; margin-top:20px; }
+  .card h2 { margin:0 0 10px; font-size:15px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); }
+  ol { margin:0; padding-left:20px; } li { margin:6px 0; }
+  .sources a { color:var(--muted); font-size:14px; } .sources li { margin:3px 0; }
+  .archive { display:flex; flex-wrap:wrap; gap:8px; }
+  .archive button { background:transparent; color:var(--text); border:1px solid var(--line); border-radius:999px; padding:6px 12px; font:inherit; font-size:14px; cursor:pointer; }
+  .archive button[aria-current="true"] { border-color:var(--accent); color:var(--accent); }
+  .note { color:var(--muted); font-size:13px; margin-top:24px; }
+  .empty { color:var(--muted); padding:40px 0; text-align:center; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <span class="eyebrow"><span class="dot"></span>FurtuneMaker Market News</span>
+  <h1 id="title">Today's market close</h1>
+  <video id="player" controls playsinline preload="metadata"></video>
+  <section class="card"><h2>Top stories</h2><ol id="headlines"></ol></section>
+  <section class="card"><h2>Past episodes</h2><div class="archive" id="archive"></div></section>
+  <section class="card sources"><h2>Sources</h2><ul id="sources"></ul></section>
+  <p class="note">Generated automatically each weekday from public news reports. For information only, not financial advice.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let episodes = [];
+function show(ep) {
+  $("title").textContent = ep.title;
+  $("player").src = "/news/" + ep.video;
+  $("headlines").innerHTML = "";
+  (ep.headlines || []).forEach(h => { const li = document.createElement("li"); li.textContent = h; $("headlines").append(li); });
+  $("sources").innerHTML = "";
+  (ep.sources || []).forEach(s => {
+    const li = document.createElement("li"), a = document.createElement("a");
+    a.href = s.url; a.textContent = s.title || s.url; a.target = "_blank"; a.rel = "noopener";
+    li.append(a); $("sources").append(li);
+  });
+  document.querySelectorAll("#archive button").forEach(b => b.setAttribute("aria-current", b.dataset.date === ep.date));
+}
+fetch("/news/index.json?" + Date.now()).then(r => r.json()).then(list => {
+  episodes = list;
+  if (!list.length) throw 0;
+  list.forEach(ep => {
+    const b = document.createElement("button");
+    b.dataset.date = ep.date;
+    b.textContent = new Date(ep.date + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    b.onclick = () => show(ep);
+    $("archive").append(b);
+  });
+  show(list[0]);
+}).catch(() => { document.querySelector("main").insertAdjacentHTML("beforeend", '<p class="empty">The first episode will appear after the next market close.</p>'); });
+</script>
+</body>
+</html>
