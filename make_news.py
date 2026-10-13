@@ -36,6 +36,9 @@ TTS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 SCRIPT_SECONDS = int(os.environ.get("SCRIPT_SECONDS", "45"))
 FTP_DIR = os.environ.get("FTP_DIR", "public_html/news")
 KEEP_DAYS = 30
+UPLOAD_URL = os.environ.get("UPLOAD_URL") or "https://furtunemaker.com/news-upload.php"
+USE_HTTP = bool(os.environ.get("UPLOAD_TOKEN", "").strip())
+UA = {"User-Agent": "Mozilla/5.0 (FurtuneMaker news bot)"}
 ANCHOR = ROOT / "anchor.mp4" if (ROOT / "anchor.mp4").exists() else ROOT / "assets" / "anchor.mp4"
 
 today = dt.datetime.now(zoneinfo.ZoneInfo("America/New_York")).date()
@@ -55,8 +58,8 @@ def fail(title, msg):
 
 # ---------------------------------------------------------------- 0. checks before spending anything
 def preflight():
-    missing = [k for k in ("ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY", "FTP_HOST", "FTP_USER", "FTP_PASSWORD")
-               if not os.environ.get(k, "").strip()]
+    needed = ["ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY"] + ([] if USE_HTTP else ["FTP_HOST", "FTP_USER", "FTP_PASSWORD"])
+    missing = [k for k in needed if not os.environ.get(k, "").strip()]
     if missing:
         fail("Missing GitHub secret", "These secrets are empty or misspelled: " + ", ".join(missing)
              + ". Check Settings > Secrets and variables > Actions (names must match exactly).")
@@ -77,6 +80,20 @@ def preflight():
              "In ElevenLabs open Voice Library, find Riley, click 'Add to My Voices'. " + r.text[:200])
     log("ElevenLabs key and voice OK")
 
+    if USE_HTTP:
+        try:
+            r = requests.post(UPLOAD_URL, data={"token": os.environ["UPLOAD_TOKEN"].strip(), "action": "ping"},
+                              headers=UA, timeout=60)
+        except requests.RequestException as e:
+            fail("Website upload page unreachable", f"{UPLOAD_URL}: {e}")
+        if r.status_code == 404:
+            fail("Upload page not found", f"{UPLOAD_URL} does not exist. Upload news-upload.php into public_html in Hostinger File Manager.")
+        if r.status_code == 403:
+            fail("Upload key rejected", "UPLOAD_TOKEN in GitHub does not match news-upload.php. Copy it again exactly. " + r.text[:200])
+        if r.status_code != 200 or '"ok"' not in r.text:
+            fail(f"Upload page error {r.status_code}", r.text[:300])
+        log("Website upload page OK: " + r.text[:200])
+        return
     # FTP login
     try:
         ftp = ftp_connect()
@@ -216,6 +233,31 @@ def ftp_cd(ftp, path):
             ftp.cwd(part)
 
 
+def upload_http(video, entry):
+    token = os.environ["UPLOAD_TOKEN"].strip()
+    data = video.read_bytes()
+    size, step = len(data), 1024 * 1024  # 1 MB pieces
+    for i, start in enumerate(range(0, size, step)):
+        for attempt in range(3):
+            try:
+                r = requests.post(UPLOAD_URL, headers=UA, timeout=120,
+                                  data={"token": token, "action": "chunk", "date": entry["date"], "index": i},
+                                  files={"chunk": ("part.bin", data[start:start + step], "application/octet-stream")})
+                if r.status_code == 200 and '"ok"' in r.text:
+                    break
+                err = f"HTTP {r.status_code}: {r.text[:300]}"
+            except requests.RequestException as e:
+                err = str(e)
+        else:
+            raise RuntimeError(f"piece {i} failed: {err}")
+    r = requests.post(UPLOAD_URL, headers=UA, timeout=120,
+                      data={"token": token, "action": "finish", "date": entry["date"], "size": size,
+                            "entry": json.dumps(entry)})
+    if r.status_code != 200 or '"ok"' not in r.text:
+        raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
+    log("Website replied: " + r.text[:200])
+
+
 def upload(video, entry):
     ftp = ftp_connect()
     ftp_cd(ftp, FTP_DIR)
@@ -271,10 +313,11 @@ def main():
         log("DRY_RUN=1, skipping upload")
         return
     try:
-        upload(video, entry)
+        (upload_http if USE_HTTP else upload)(video, entry)
     except Exception as e:
-        fail("Upload to Hostinger failed", f"{type(e).__name__}: {e}. If the folder is wrong, set variable FTP_DIR (now '{FTP_DIR}').")
-    log(f"Uploaded to {FTP_DIR}/{video.name}")
+        hint = "" if USE_HTTP else f" If the folder is wrong, set variable FTP_DIR (now '{FTP_DIR}')."
+        fail("Upload to Hostinger failed", f"{type(e).__name__}: {e}.{hint}")
+    log(f"Uploaded {video.name} - see https://furtunemaker.com/news.html")
 
 
 if __name__ == "__main__":
