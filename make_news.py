@@ -18,6 +18,7 @@ import ftplib
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import zoneinfo
@@ -165,16 +166,35 @@ def make_video(voice, path):
 
 # ---------------------------------------------------------------- 4. upload
 def ftp_connect():
-    host = os.environ["FTP_HOST"].strip().removeprefix("ftp://").rstrip("/")
+    host = os.environ["FTP_HOST"].strip().removeprefix("ftp://").removeprefix("ftps://").rstrip("/")
+    port = 21
+    if host.count(":") == 1:  # "host:port"
+        host, port = host.split(":")[0], int(host.split(":")[1])
     user, pw = os.environ["FTP_USER"].strip(), os.environ["FTP_PASSWORD"]
+    # GitHub's servers have no IPv6, so always connect over IPv4.
     try:
-        ftp = ftplib.FTP_TLS(host, timeout=60)
-        ftp.login(user, pw)
-        ftp.prot_p()
-    except ftplib.all_errors:
-        ftp = ftplib.FTP(host, timeout=60)
-        ftp.login(user, pw)
-    return ftp
+        ip = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    except socket.gaierror:
+        raise OSError(f"'{host}' has no IPv4 address. Put the IPv4 'FTP IP' from Hostinger hPanel "
+                      "(looks like 123.45.67.89) in the FTP_HOST secret")
+    log(f"FTP connecting to {host} ({ip}) port {port}")
+    last = None
+    for tls in (True, False):
+        try:
+            ftp = ftplib.FTP_TLS(timeout=60) if tls else ftplib.FTP(timeout=60)
+            ftp.connect(ip, port)
+            ftp.login(user, pw)
+            if tls:
+                ftp.prot_p()
+            ftp.set_pasv(True)
+            return ftp
+        except ftplib.error_perm as e:
+            if str(e).startswith("530"):
+                raise OSError(f"FTP username or password is wrong ({e})")
+            last = e
+        except Exception as e:
+            last = e
+    raise last
 
 
 def ftp_cd(ftp, path):
