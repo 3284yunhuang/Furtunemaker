@@ -1,9 +1,9 @@
 name: Daily market news video
 
 on:
-  schedule:
-    - cron: "30 21 * * 1-5"
-  workflow_dispatch: {}
+
+    
+      workflow_dispatch: {}
 
 jobs:
   make-news:
